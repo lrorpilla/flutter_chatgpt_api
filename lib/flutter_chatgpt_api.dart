@@ -45,9 +45,11 @@ class ChatGPTApi {
   Future<ChatResponse> sendMessage({
     required String message,
     required String accessToken,
+    required Function(String) onProgress,
     String? conversationId,
     String? parentMessageId,
   }) async {
+    final client = http.Client();
     parentMessageId ??= const Uuid().v4();
 
     final body = ConversationBody(
@@ -66,9 +68,10 @@ class ChatGPTApi {
 
     final url = '$backendApiBaseUrl/conversation';
 
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
+    final request = http.Request('POST', Uri.parse(url));
+
+    request.headers.addAll(
+      {
         'user-agent': defaultUserAgent,
         'x-openai-assistant-app-id': '',
         'accept-language': 'en-US,en;q=0.9',
@@ -85,7 +88,42 @@ class ChatGPTApi {
         'Accept': 'text/event-stream',
         'Cookie': 'cf_clearance=$clearanceToken'
       },
-      body: body.toJson(),
+    );
+
+    request.body = body.toJson();
+
+    final streamedResponse = await client.send(request);
+
+    final List<int> bytes = [];
+
+    final subscription = streamedResponse.stream.listen(
+      (value) {
+        bytes.addAll(value);
+
+        String text = utf8.decode(bytes);
+        String longestLine =
+            text.split('\n').reduce((a, b) => a.length > b.length ? a : b);
+
+        var result = longestLine.replaceFirst('data: ', '');
+
+        var messageResult = ConversationResponseEvent.fromJson(result);
+
+        final lastResult = messageResult.message?.content.parts.first ?? '';
+
+        onProgress(lastResult.trim());
+      },
+    );
+
+    await subscription.asFuture();
+
+    final response = http.Response.bytes(
+      bytes,
+      streamedResponse.statusCode,
+      request: streamedResponse.request,
+      headers: streamedResponse.headers,
+      isRedirect: streamedResponse.isRedirect,
+      persistentConnection: streamedResponse.persistentConnection,
+      reasonPhrase: streamedResponse.reasonPhrase,
     );
 
     if (response.statusCode != 200) {
