@@ -24,7 +24,7 @@ class ChatGPTApi {
     required this.sessionToken,
     required this.clearanceToken,
     this.apiBaseUrl = 'https://chat.openai.com/api',
-    this.backendApiBaseUrl = 'https://chat.openai.com/backend-api',
+    this.backendApiBaseUrl = 'https://bypass.duti.tech/api',
     this.userAgent = defaultUserAgent,
   });
 
@@ -42,12 +42,12 @@ class ChatGPTApi {
     'sec-fetch-site': 'same-origin',
   };
 
-  Future<ChatResponse> sendMessage(
-    String message, {
+  Future<ChatResponse> sendMessage({
+    required String message,
+    required String accessToken,
     String? conversationId,
     String? parentMessageId,
   }) async {
-    final accessToken = await _refreshAccessToken();
     parentMessageId ??= const Uuid().v4();
 
     final body = ConversationBody(
@@ -115,41 +115,6 @@ class ChatGPTApi {
         messageId: messageResult.message!.id,
         conversationId: messageResult.conversationId,
       );
-    }
-  }
-
-  Future<String> _refreshAccessToken() async {
-    final cachedAccessToken = _accessTokenCache['KEY_ACCESS_TOKEN'];
-    if (cachedAccessToken != null) {
-      return cachedAccessToken;
-    }
-
-    try {
-      final res = await http.get(
-        Uri.parse('$apiBaseUrl/auth/session'),
-        headers: {
-          'cookie':
-              'cf_clearance=$clearanceToken;__Secure-next-auth.session-token=$sessionToken',
-          'accept': '*/*',
-          ...defaultHeaders,
-        },
-      );
-
-      if (res.statusCode != 200) {
-        throw Exception('Failed to refresh access token');
-      }
-
-      final accessToken = jsonDecode(res.body)['accessToken'];
-
-      if (accessToken == null) {
-        throw Exception(
-            'Failed to refresh access token, token in response is null');
-      }
-
-      _accessTokenCache['KEY_ACCESS_TOKEN'] = accessToken;
-      return accessToken;
-    } catch (err) {
-      throw Exception('ChatGPT failed to refresh auth token: $err');
     }
   }
 }
