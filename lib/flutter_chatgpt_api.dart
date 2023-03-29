@@ -45,7 +45,7 @@ class ChatGPTApi {
   Future<ChatResponse> sendMessage({
     required String message,
     required String accessToken,
-    required Function(String) onProgress,
+    required Function(ChatResponse) onProgress,
     String? conversationId,
     String? parentMessageId,
   }) async {
@@ -98,19 +98,28 @@ class ChatGPTApi {
 
     final subscription = streamedResponse.stream.listen(
       (value) {
-        bytes.addAll(value);
+        try {
+          bytes.addAll(value);
 
-        String text = utf8.decode(bytes);
-        String longestLine =
-            text.split('\n').reduce((a, b) => a.length > b.length ? a : b);
+          String text = utf8.decode(bytes);
+          String longestLine =
+              text.split('\n').reduce((a, b) => a.length > b.length ? a : b);
 
-        var result = longestLine.replaceFirst('data: ', '');
+          var result = longestLine.replaceFirst('data: ', '');
 
-        var messageResult = ConversationResponseEvent.fromJson(result);
+          var messageResult = ConversationResponseEvent.fromJson(result);
 
-        final lastResult = messageResult.message?.content.parts.first ?? '';
+          final lastResult =
+              messageResult.message?.content.parts.first.trim() ?? '';
 
-        onProgress(lastResult.trim());
+          onProgress(
+            ChatResponse(
+              message: lastResult,
+              messageId: messageResult.message!.id,
+              conversationId: messageResult.conversationId,
+            ),
+          );
+        } finally {}
       },
     );
 
